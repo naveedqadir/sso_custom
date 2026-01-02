@@ -26,6 +26,8 @@
 - [API Endpoints](#-api-endpoints)
 - [Technology Stack](#-technology-stack)
 - [Configuration](#-configuration)
+- [Flow Summary](#-flow-summary)
+- [True SSO](#-true-sso-single-sign-on)
 - [Production Deployment](#-production-deployment)
 
 ---
@@ -100,47 +102,45 @@
           │ 4. Authorization Request        │                                      │
           │ ───────────────────────────────►│                                      │
           │                                 │                                      │
-          │ 5. Show Login Page              │                                      │
+          │ 5. If not logged in:            │                                      │
+          │    Show Login Page              │                                      │
           │ ◄───────────────────────────────│                                      │
           │                                 │                                      │
           │ 6. User enters credentials      │                                      │
           │ ───────────────────────────────►│                                      │
           │                                 │                                      │
-          │ 7. Show Consent Screen          │                                      │
-          │    "App B wants to access:"     │                                      │
-          │    ✓ Your profile               │                                      │
-          │    ✓ Your email                 │                                      │
-          │ ◄───────────────────────────────│                                      │
+          │ 7. First-party client (app-b):  │                                      │
+          │    Auto-approve (no consent)    │                                      │
+          │    ─────────────────────────────│                                      │
+          │    Third-party client:          │                                      │
+          │    Show consent screen          │                                      │
           │                                 │                                      │
-          │ 8. User clicks "Allow"          │                                      │
-          │ ───────────────────────────────►│                                      │
-          │                                 │                                      │
-          │                                 │ 9. Generate Authorization Code       │
+          │                                 │ 8. Generate Authorization Code       │
           │                                 │    (short-lived, one-time use)       │
           │                                 │                                      │
-          │ 10. Redirect: redirect_uri?code=AUTH_CODE&state=xyz                    │
+          │ 9. Redirect: redirect_uri?code=AUTH_CODE&state=xyz                     │
           │ ◄───────────────────────────────│                                      │
           │                                 │                                      │
-          │ 11. Callback with code          │                                      │
+          │ 10. Callback with code          │                                      │
           │ ────────────────────────────────────────────────────────────────────── │
           │                                                                        │
           │                         ┌──────────────────────────────────────────────┤
-          │                         │  12. Verify state parameter matches          │
+          │                         │  11. Verify state parameter matches          │
           │                         └──────────────────────────────────────────────┤
           │                                                                        │
-          │                                 │ 13. POST /oauth/token                 │
+          │                                 │ 12. POST /oauth/token                 │
           │                                 │     grant_type=authorization_code    │
           │                                 │     code=AUTH_CODE                   │
           │                                 │     code_verifier=...                │
           │                                 │     client_id=app-b-client           │
           │                                 │ ◄─────────────────────────────────── │
           │                                 │                                      │
-          │                                 │ 14. Validate:                        │
+          │                                 │ 13. Validate:                        │
           │                                 │     • Authorization code             │
           │                                 │     • PKCE code_challenge            │
           │                                 │     • Client credentials             │
           │                                 │                                      │
-          │                                 │ 15. Return Tokens:                   │
+          │                                 │ 14. Return Tokens:                   │
           │                                 │     {                                │
           │                                 │       access_token: "...",           │
           │                                 │       refresh_token: "...",          │
@@ -148,8 +148,55 @@
           │                                 │     }                                │
           │                                 │ ────────────────────────────────────►│
           │                                 │                                      │
-          │ 16. User Authenticated! Show Dashboard                                 │
+          │ 15. User Authenticated! Show Dashboard                                 │
           │ ◄──────────────────────────────────────────────────────────────────────│
+          │                                                                        │
+          ▼                                                                        ▼
+```
+
+### Silent SSO Flow (prompt=none)
+
+```
+    ┌────────────┐                                                           ┌────────────┐
+    │            │                                                           │            │
+    │   USER     │                                                           │   APP B    │
+    │  BROWSER   │                                                           │   CLIENT   │
+    │            │                                                           │            │
+    └─────┬──────┘                                                           └─────┬──────┘
+          │                                                                        │
+          │ 1. User visits App B (already logged in at App A)                      │
+          │ ────────────────────────────────────────────────────────────────────── │
+          │                                                                        │
+          │                         ┌──────────────────────────────────────────────┤
+          │                         │  2. Auto-SSO Check:                          │
+          │                         │     • Not logged in locally?                 │
+          │                         │     • No user_logged_out flag?               │
+          │                         │     • SSO not already attempted?             │
+          │                         └──────────────────────────────────────────────┤
+          │                                                                        │
+          │ 3. Silent redirect with prompt=none (hidden iframe/redirect)           │
+          │    /oauth/authorize?...&prompt=none                                    │
+          │ ◄──────────────────────────────────────────────────────────────────────│
+          │                                                                        │
+          │                           ┌────────────┐                               │
+          │                           │   APP A    │                               │
+          │                           │   AUTH     │                               │
+          │                           │   SERVER   │                               │
+          │                           └─────┬──────┘                               │
+          │                                 │                                      │
+          │ 4. Check if user has session    │                                      │
+          │ ───────────────────────────────►│                                      │
+          │                                 │                                      │
+          │ ┌───────────────────────────────┴───────────────────────────────┐      │
+          │ │  IF session exists:                                           │      │
+          │ │    → Auto-authorize silently (no UI)                          │      │
+          │ │    → Return authorization code                                │      │
+          │ │    → User auto-logged into App B ✅                           │      │
+          │ ├───────────────────────────────────────────────────────────────┤      │
+          │ │  IF no session:                                               │      │
+          │ │    → Return error=login_required                              │      │
+          │ │    → User sees normal App B landing page                      │      │
+          │ └───────────────────────────────────────────────────────────────┘      │
           │                                                                        │
           ▼                                                                        ▼
 ```
@@ -614,11 +661,12 @@ node src/scripts/registerClient.js
 │      ↓                                                                      │
 │   Step 3   Redirect to App A with authorization request                     │
 │      ↓                                                                      │
-│   Step 4   User authenticates on App A                                      │
+│   Step 4   User authenticates on App A (if not already logged in)           │
 │      ↓                                                                      │
-│   Step 5   Consent screen shows requested permissions                       │
+│   Step 5   First-party client: Auto-approve (no consent screen)             │
+│            Third-party client: Show consent screen                          │
 │      ↓                                                                      │
-│   Step 6   User grants consent → Authorization code generated               │
+│   Step 6   Authorization code generated                                     │
 │      ↓                                                                      │
 │   Step 7   Redirect back to App B with code + state                         │
 │      ↓                                                                      │

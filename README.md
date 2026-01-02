@@ -1,4 +1,4 @@
-# 🔐 OAuth 2.0 / OpenID Connect - MERN Stack
+# 🔐 OAuth 2.0 / OpenID Connect - MERN Stack SSO
 
 <div align="center">
 
@@ -9,9 +9,9 @@
 ![React](https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react)
 ![MongoDB](https://img.shields.io/badge/MongoDB-47A248?style=for-the-badge&logo=mongodb)
 
-**A complete OAuth 2.0 Authorization Server implementation using the MERN stack**
+**A complete OAuth 2.0 Authorization Server & Client implementation using the MERN stack**
 
-*Authorization Code Flow with PKCE • OpenID Connect • JWT Authentication • Tailwind CSS*
+*Authorization Code Flow with PKCE • OpenID Connect • Silent SSO • JWT Authentication • Tailwind CSS*
 
 </div>
 
@@ -19,8 +19,10 @@
 
 ## 📋 Table of Contents
 
+- [Overview](#-overview)
 - [Architecture](#-architecture)
 - [Project Structure](#-project-structure)
+- [File Reference](#-file-reference)
 - [Getting Started](#-getting-started)
 - [Security Features](#-security-features)
 - [API Endpoints](#-api-endpoints)
@@ -29,6 +31,27 @@
 - [Flow Summary](#-flow-summary)
 - [True SSO](#-true-sso-single-sign-on)
 - [Production Deployment](#-production-deployment)
+
+---
+
+## 🎯 Overview
+
+This project demonstrates a **production-ready OAuth 2.0 / OpenID Connect implementation** with two MERN applications:
+
+| Application | Role | Description |
+|:------------|:-----|:------------|
+| **App A** | Authorization Server | Handles user registration, login, and issues OAuth 2.0 tokens |
+| **App B** | OAuth Client | Uses OAuth 2.0 to authenticate users via App A |
+
+### Key Features
+
+- ✅ **OAuth 2.0 Authorization Code Flow** with PKCE (RFC 7636)
+- ✅ **OpenID Connect Core 1.0** with ID tokens and UserInfo endpoint
+- ✅ **Silent SSO** using `prompt=none` (OIDC Section 3.1.2.1)
+- ✅ **First-party auto-approval** (no consent screen for trusted clients)
+- ✅ **Token revocation** (RFC 7009)
+- ✅ **OIDC Discovery** (`.well-known/openid-configuration`)
+- ✅ **Clean architecture** - App B uses OAuth-only authentication (no legacy routes)
 
 ---
 
@@ -208,56 +231,152 @@
 ```
 📦 sso_custom/
 ├── 📄 package.json                 # Root scripts for managing all apps
-├── 📄 README.md
+├── 📄 README.md                    # This documentation
 ├── 📄 .gitignore
 │
 ├── 📂 app-a/                       # 🔐 Authorization Server (OAuth 2.0 Provider)
 │   │
 │   ├── 📂 server/                  # Express.js Backend (Port 5001)
 │   │   ├── 📂 src/
-│   │   │   ├── 📂 config/          # Database & app configuration
-│   │   │   ├── 📂 controllers/     # authController, oauth2Controller
-│   │   │   ├── 📂 middleware/      # JWT authentication middleware
-│   │   │   ├── 📂 models/          # User, OAuthClient, AuthorizationCode, RefreshToken
-│   │   │   ├── 📂 routes/          # /api/auth, /oauth/*
-│   │   │   ├── 📂 scripts/         # registerClient.js
-│   │   │   ├── 📂 utils/           # tokenUtils, oauth2Utils
-│   │   │   └── 📄 index.js         # Server entry point
+│   │   │   ├── 📂 config/
+│   │   │   │   ├── 📄 db.js        # MongoDB connection setup
+│   │   │   │   └── 📄 index.js     # App configuration (ports, JWT, OAuth settings)
+│   │   │   ├── 📂 controllers/
+│   │   │   │   ├── 📄 authController.js    # User registration, login, logout, getMe
+│   │   │   │   └── 📄 oauth2Controller.js  # OAuth authorize, token, userinfo, revoke
+│   │   │   ├── 📂 middleware/
+│   │   │   │   └── 📄 auth.js      # JWT protection middleware
+│   │   │   ├── 📂 models/
+│   │   │   │   ├── 📄 AuthorizationCode.js # Short-lived auth codes
+│   │   │   │   ├── 📄 OAuthClient.js       # Registered OAuth clients
+│   │   │   │   ├── 📄 RefreshToken.js      # Long-lived refresh tokens
+│   │   │   │   └── 📄 User.js              # User accounts with bcrypt passwords
+│   │   │   ├── 📂 routes/
+│   │   │   │   ├── 📄 auth.js      # /api/auth/* routes (register, login, logout, me)
+│   │   │   │   └── 📄 oauth2.js    # OAuth 2.0/OIDC endpoints
+│   │   │   ├── 📂 scripts/
+│   │   │   │   └── 📄 registerClient.js    # Script to register OAuth clients
+│   │   │   ├── 📂 utils/
+│   │   │   │   ├── 📄 oauth2Utils.js       # PKCE, token generation/validation
+│   │   │   │   └── 📄 tokenUtils.js        # Local JWT utilities
+│   │   │   └── 📄 index.js         # Express server entry point
 │   │   ├── 📄 .env.example
 │   │   └── 📄 package.json
 │   │
 │   └── 📂 client/                  # React Frontend (Port 3001)
 │       ├── 📂 src/
-│       │   ├── 📂 components/      # PrivateRoute, Navbar
-│       │   ├── 📂 context/         # AuthContext
-│       │   ├── 📂 pages/           # Login, Register, Dashboard, OAuthAuthorize
-│       │   ├── 📂 services/        # API service
-│       │   └── 📄 App.js
+│       │   ├── 📂 components/
+│       │   │   └── 📄 PrivateRoute.js      # Auth-protected route wrapper
+│       │   ├── 📂 context/
+│       │   │   └── 📄 AuthContext.js       # Authentication state management
+│       │   ├── 📂 pages/
+│       │   │   ├── 📄 Dashboard.js         # User dashboard with OAuth info
+│       │   │   ├── 📄 Login.js             # Login form
+│       │   │   ├── 📄 OAuthAuthorize.js    # OAuth authorization UI handler
+│       │   │   └── 📄 Register.js          # Registration form
+│       │   ├── 📂 services/
+│       │   │   └── 📄 api.js               # Axios API client for auth endpoints
+│       │   ├── 📄 App.js           # React Router setup
+│       │   ├── 📄 index.js         # React entry point
+│       │   └── 📄 index.css        # Tailwind CSS styles
 │       ├── 📄 .env.example
 │       └── 📄 package.json
 │
-└── 📂 app-b/                       # 🌐 Client Application (OAuth 2.0 Client)
+└── 📂 app-b/                       # 🌐 OAuth 2.0 Client Application
     │
     ├── 📂 server/                  # Express.js Backend (Port 5002)
     │   ├── 📂 src/
-    │   │   ├── 📂 config/          # App configuration
-    │   │   ├── 📂 controllers/     # oauth2Controller
-    │   │   ├── 📂 routes/          # /oauth/*
-    │   │   ├── 📂 utils/           # tokenUtils, oauth2Client
-    │   │   └── 📄 index.js         # Server entry point
+    │   │   ├── 📂 config/
+    │   │   │   └── 📄 index.js     # App configuration (OAuth client credentials)
+    │   │   ├── 📂 controllers/
+    │   │   │   └── 📄 oauth2Controller.js  # Token exchange, logout, getMe
+    │   │   ├── 📂 routes/
+    │   │   │   └── 📄 oauth2.js    # /oauth/* client routes
+    │   │   ├── 📂 utils/
+    │   │   │   ├── 📄 oauth2Client.js      # Token exchange, userinfo, revoke calls
+    │   │   │   └── 📄 tokenUtils.js        # Local JWT for App B sessions
+    │   │   └── 📄 index.js         # Express server entry point
     │   ├── 📄 .env.example
     │   └── 📄 package.json
     │
     └── 📂 client/                  # React Frontend (Port 3002)
         ├── 📂 src/
-        │   ├── 📂 components/      # PrivateRoute
-        │   ├── 📂 context/         # AuthContext (with PKCE)
-        │   ├── 📂 pages/           # Landing, Dashboard, OAuthCallback
-        │   ├── 📂 services/        # API service
-        │   └── 📄 App.js
+        │   ├── 📂 components/
+        │   │   └── 📄 PrivateRoute.js      # Auth-protected route wrapper
+        │   ├── 📂 context/
+        │   │   └── 📄 AuthContext.js       # OAuth with PKCE & silent SSO
+        │   ├── 📂 pages/
+        │   │   ├── 📄 Dashboard.js         # Authenticated user dashboard
+        │   │   ├── 📄 Landing.js           # Public landing page with OAuth login
+        │   │   └── 📄 OAuthCallback.js     # Handles OAuth redirect callback
+        │   ├── 📂 services/
+        │   │   └── 📄 api.js               # OAuth API client (callback, refresh, logout, me)
+        │   ├── 📄 App.js           # React Router setup
+        │   ├── 📄 index.js         # React entry point
+        │   └── 📄 index.css        # Tailwind CSS styles
         ├── 📄 .env.example
         └── 📄 package.json
 ```
+
+---
+
+## 📄 File Reference
+
+### App A - Authorization Server
+
+#### Server Files
+
+| File | Purpose |
+|:-----|:--------|
+| `config/db.js` | MongoDB connection using Mongoose |
+| `config/index.js` | Configuration: ports, JWT secret, cookie options, OAuth issuer |
+| `controllers/authController.js` | `register`, `login`, `logout`, `getMe`, `verifyTokenHandler` |
+| `controllers/oauth2Controller.js` | `authorize`, `token`, `userinfo`, `revoke`, `discovery`, `jwks` |
+| `middleware/auth.js` | JWT verification middleware (`protect`) |
+| `models/User.js` | User schema with bcrypt password hashing |
+| `models/OAuthClient.js` | OAuth client registration (clientId, clientSecret, redirectUris) |
+| `models/AuthorizationCode.js` | Short-lived auth codes with PKCE challenge |
+| `models/RefreshToken.js` | Long-lived refresh tokens with revocation |
+| `routes/auth.js` | `/api/auth/*` routes (register, login, logout, me, verify) |
+| `routes/oauth2.js` | OAuth 2.0 + OIDC endpoints |
+| `scripts/registerClient.js` | CLI script to register App B as OAuth client |
+| `utils/oauth2Utils.js` | PKCE validation, token generation (access, ID, refresh) |
+| `utils/tokenUtils.js` | Local JWT generation/verification |
+
+#### Client Files
+
+| File | Purpose |
+|:-----|:--------|
+| `components/PrivateRoute.js` | Protects routes requiring authentication |
+| `context/AuthContext.js` | Auth state: user, login, register, logout functions |
+| `pages/Login.js` | Login form with email/password |
+| `pages/Register.js` | Registration form with name/email/password |
+| `pages/Dashboard.js` | User dashboard, link to App B |
+| `pages/OAuthAuthorize.js` | Handles OAuth authorization flow, silent SSO (prompt=none) |
+| `services/api.js` | Axios client for `/api/auth/*` endpoints |
+
+### App B - OAuth Client
+
+#### Server Files
+
+| File | Purpose |
+|:-----|:--------|
+| `config/index.js` | Configuration: OAuth client ID/secret, redirect URI |
+| `controllers/oauth2Controller.js` | `exchangeAuthCode`, `refreshAccessToken`, `oauthLogout`, `getMe` |
+| `routes/oauth2.js` | `/oauth/*` routes (callback, refresh, logout, me) |
+| `utils/oauth2Client.js` | HTTP calls to App A (token exchange, userinfo, revoke) |
+| `utils/tokenUtils.js` | Local JWT for App B session management |
+
+#### Client Files
+
+| File | Purpose |
+|:-----|:--------|
+| `components/PrivateRoute.js` | Protects routes requiring authentication |
+| `context/AuthContext.js` | OAuth + PKCE: initiateOAuthLogin, handleOAuthCallback, silent SSO |
+| `pages/Landing.js` | Public page with "Login with OAuth 2.0" button |
+| `pages/Dashboard.js` | Authenticated user dashboard |
+| `pages/OAuthCallback.js` | Handles OAuth redirect, exchanges code for tokens |
+| `services/api.js` | OAuth API client (callback, refresh, logout, me) |
 
 ---
 
@@ -526,12 +645,15 @@ Open **4 terminals** and run:
 
 | Method | Endpoint | Description | Auth |
 |:------:|:---------|:------------|:----:|
-| `POST` | `/oauth/callback` | Exchange code for tokens (PKCE) | ❌ |
+| `POST` | `/oauth/callback` | Exchange authorization code for tokens (PKCE) | ❌ |
 | `POST` | `/oauth/refresh` | Refresh access token | ❌ |
 | `POST` | `/oauth/logout` | Logout with token revocation | ❌ |
 | `GET` | `/oauth/me` | Get current user | 🎫 |
+| `GET` | `/health` | Health check endpoint | ❌ |
 
-> 🎫 = Access token required
+> 🎫 = Local App B token required
+
+**Note:** App B is a pure OAuth 2.0 client - it has no legacy authentication routes. All authentication flows through OAuth 2.0 with App A.
 
 </details>
 
@@ -547,6 +669,32 @@ Open **4 terminals** and run:
 | **Backend** | ![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=node.js) ![Express](https://img.shields.io/badge/Express.js-4.x-000000?logo=express) |
 | **Database** | ![MongoDB](https://img.shields.io/badge/MongoDB-47A248?logo=mongodb) ![Mongoose](https://img.shields.io/badge/Mongoose-880000?logo=mongoose) |
 | **Auth** | ![JWT](https://img.shields.io/badge/JWT-000000?logo=jsonwebtokens) ![OAuth](https://img.shields.io/badge/OAuth_2.0-blue) ![OIDC](https://img.shields.io/badge/OpenID_Connect-orange) |
+
+</div>
+
+### Dependencies Summary
+
+#### App A Server
+- `express` - Web framework
+- `mongoose` - MongoDB ODM
+- `bcryptjs` - Password hashing (12 salt rounds)
+- `jsonwebtoken` - JWT token handling
+- `cookie-parser` - Cookie parsing middleware
+- `cors` - Cross-origin resource sharing
+- `uuid` - Unique identifier generation
+
+#### App B Server  
+- `express` - Web framework
+- `axios` - HTTP client for OAuth server calls
+- `jsonwebtoken` - Local session JWT
+- `cookie-parser` - Cookie parsing
+- `cors` - Cross-origin resource sharing
+
+#### React Clients (Both Apps)
+- `react` v18 - UI library
+- `react-router-dom` v6 - Client-side routing
+- `axios` - HTTP client
+- `tailwindcss` - Utility-first CSS
 
 </div>
 
@@ -822,6 +970,26 @@ This SSO implementation follows:
 <div align="center">
 
 **MIT License** - feel free to use this for your projects!
+
+---
+
+## 📊 Code Summary
+
+| Component | Files | Lines of Code (approx) |
+|:----------|:-----:|:----------------------:|
+| App A Server | 12 | ~900 |
+| App A Client | 7 | ~550 |
+| App B Server | 5 | ~350 |
+| App B Client | 6 | ~500 |
+| **Total** | **30** | **~2300** |
+
+### Architecture Highlights
+
+- **Clean OAuth-Only Client**: App B has no legacy authentication - purely OAuth 2.0
+- **Stateless Token Exchange**: Backend-to-backend token exchange with PKCE
+- **Session Management**: Local JWT sessions after OAuth authentication
+- **Silent SSO**: Automatic cross-application sign-in using `prompt=none`
+- **First-Party Trust**: Auto-approve for trusted clients (no consent screen)
 
 ---
 

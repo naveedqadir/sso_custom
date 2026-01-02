@@ -1,129 +1,18 @@
 const { generateToken } = require('../utils/tokenUtils');
 const {
-  generatePKCE,
-  generateState,
-  buildAuthorizationUrl,
   exchangeCodeForTokens,
   getUserInfo,
   revokeToken
 } = require('../utils/oauth2Client');
 const config = require('../config');
 
-// In-memory store for PKCE and state (use Redis in production)
-const pendingAuth = new Map();
-
 /**
  * OAuth 2.0 Client Controller for App B
- * Implements OAuth 2.0 Authorization Code Flow with PKCE
+ * Handles client-side PKCE flow (frontend generates code_verifier)
  */
 
-// GET /oauth/login - Initiate OAuth flow (Server-Side Flow)
-const initiateOAuth = async (req, res) => {
-  try {
-    // Generate PKCE parameters
-    const { codeVerifier, codeChallenge } = generatePKCE();
-    const state = generateState();
-    const nonce = generateState(); // For OIDC
-    
-    // Store PKCE verifier and state (expires in 10 minutes)
-    pendingAuth.set(state, {
-      codeVerifier,
-      nonce,
-      createdAt: Date.now()
-    });
-    
-    // Clean up old entries
-    for (const [key, value] of pendingAuth.entries()) {
-      if (Date.now() - value.createdAt > 10 * 60 * 1000) {
-        pendingAuth.delete(key);
-      }
-    }
-    
-    // Build authorization URL
-    const authUrl = buildAuthorizationUrl({
-      state,
-      codeChallenge,
-      scope: 'openid profile email',
-      nonce
-    });
-    
-    // Redirect to OAuth server
-    res.redirect(authUrl);
-  } catch (error) {
-    console.error('OAuth initiation error:', error);
-    res.redirect(`${config.clientUrl}?error=oauth_init_failed`);
-  }
-};
-
-// GET /oauth/callback - Handle OAuth callback (Server-Side Flow)
-const handleOAuthCallback = async (req, res) => {
-  try {
-    const { code, state, error, error_description } = req.query;
-    
-    // Check for OAuth error
-    if (error) {
-      console.error('OAuth error:', error, error_description);
-      return res.redirect(`${config.clientUrl}?error=${error}&error_description=${encodeURIComponent(error_description || '')}`);
-    }
-    
-    // Validate state (CSRF protection)
-    if (!state || !pendingAuth.has(state)) {
-      return res.redirect(`${config.clientUrl}?error=invalid_state`);
-    }
-    
-    const { codeVerifier, nonce } = pendingAuth.get(state);
-    pendingAuth.delete(state); // One-time use
-    
-    if (!code) {
-      return res.redirect(`${config.clientUrl}?error=missing_code`);
-    }
-    
-    // Exchange code for tokens
-    const tokenResult = await exchangeCodeForTokens(code, codeVerifier);
-    
-    if (!tokenResult.success) {
-      return res.redirect(`${config.clientUrl}?error=${tokenResult.error}`);
-    }
-    
-    const { access_token, refresh_token, id_token, scope } = tokenResult.data;
-    
-    // Get user info
-    const userInfoResult = await getUserInfo(access_token);
-    
-    if (!userInfoResult.success) {
-      return res.redirect(`${config.clientUrl}?error=userinfo_failed`);
-    }
-    
-    const userInfo = userInfoResult.data;
-    
-    // Create local session for App B
-    const user = {
-      id: userInfo.sub,
-      name: userInfo.name,
-      email: userInfo.email,
-      source: 'oauth2'
-    };
-    
-    const localToken = generateToken(user);
-    
-    // Set cookies
-    res.cookie('appb_token', localToken, config.cookieOptions);
-    res.cookie('appb_refresh_token', refresh_token, {
-      ...config.cookieOptions,
-      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
-    });
-    
-    // Redirect to frontend with success
-    res.redirect(`${config.clientUrl}/oauth/success?token=${localToken}`);
-  } catch (error) {
-    console.error('OAuth callback error:', error);
-    res.redirect(`${config.clientUrl}?error=callback_failed`);
-  }
-};
-
-// POST /oauth/callback - Handle OAuth callback from frontend (PKCE from client)
-// This is for the client-side PKCE flow where the frontend generates the verifier
-const handleFrontendOAuthCallback = async (req, res) => {
+// POST /oauth/callback - Exchange authorization code for tokens
+const exchangeAuthCode = async (req, res) => {
   try {
     const { code, codeVerifier, state } = req.body;
 
@@ -263,9 +152,7 @@ const oauthLogout = async (req, res) => {
 };
 
 module.exports = {
-  initiateOAuth,
-  handleOAuthCallback,
-  handleFrontendOAuthCallback,
+  exchangeAuthCode,
   refreshAccessToken,
   oauthLogout
 };

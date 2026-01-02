@@ -1,56 +1,11 @@
-const crypto = require('crypto');
 const axios = require('axios');
 const config = require('../config');
 
 /**
  * OAuth 2.0 Client Utilities for App B
- * Implements OAuth 2.0 Authorization Code Flow with PKCE
+ * Backend utilities for token exchange and user info
+ * Note: PKCE is generated client-side for silent SSO
  */
-
-// Generate PKCE code verifier and challenge (RFC 7636)
-const generatePKCE = () => {
-  // Code verifier: 43-128 character random string
-  const codeVerifier = crypto.randomBytes(32).toString('base64url');
-  
-  // Code challenge: SHA256 hash of verifier (S256 method)
-  const codeChallenge = crypto
-    .createHash('sha256')
-    .update(codeVerifier)
-    .digest('base64url');
-  
-  return { codeVerifier, codeChallenge };
-};
-
-// Generate state parameter for CSRF protection
-const generateState = () => {
-  return crypto.randomBytes(16).toString('hex');
-};
-
-// Build authorization URL
-const buildAuthorizationUrl = (params) => {
-  const {
-    state,
-    codeChallenge,
-    scope = 'openid profile email',
-    nonce
-  } = params;
-  
-  const authUrl = new URL(`${config.appAServerUrl}/oauth/authorize`);
-  
-  authUrl.searchParams.set('response_type', 'code');
-  authUrl.searchParams.set('client_id', config.oauthClientId);
-  authUrl.searchParams.set('redirect_uri', config.oauthRedirectUri);
-  authUrl.searchParams.set('scope', scope);
-  authUrl.searchParams.set('state', state);
-  authUrl.searchParams.set('code_challenge', codeChallenge);
-  authUrl.searchParams.set('code_challenge_method', 'S256');
-  
-  if (nonce) {
-    authUrl.searchParams.set('nonce', nonce);
-  }
-  
-  return authUrl.toString();
-};
 
 // Exchange authorization code for tokens
 const exchangeCodeForTokens = async (code, codeVerifier) => {
@@ -165,9 +120,6 @@ const revokeToken = async (token) => {
 };
 
 module.exports = {
-  generatePKCE,
-  generateState,
-  buildAuthorizationUrl,
   exchangeCodeForTokens,
   getUserInfo,
   refreshAccessToken,

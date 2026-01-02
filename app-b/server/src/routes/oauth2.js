@@ -3,7 +3,8 @@ const router = express.Router();
 const {
   exchangeAuthCode,
   refreshAccessToken,
-  oauthLogout
+  oauthLogout,
+  getMe
 } = require('../controllers/oauth2Controller');
 
 /**
@@ -13,6 +14,7 @@ const {
  * - POST /callback - Exchange authorization code for tokens
  * - POST /refresh - Refresh access token
  * - POST /logout - Logout and revoke tokens
+ * - GET /me - Get current user
  */
 
 // Exchange authorization code for tokens (frontend PKCE flow)
@@ -23,5 +25,8 @@ router.post('/refresh', refreshAccessToken);
 
 // Logout with token revocation
 router.post('/logout', oauthLogout);
+
+// Get current user
+router.get('/me', getMe);
 
 module.exports = router;

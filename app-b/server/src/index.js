@@ -2,7 +2,6 @@ const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const config = require('./config');
-const authRoutes = require('./routes/auth');
 const oauth2Routes = require('./routes/oauth2');
 
 // Initialize express app
@@ -29,9 +28,6 @@ app.get('/health', (req, res) => {
 
 // OAuth 2.0 client routes (mounted at /oauth)
 app.use('/oauth', oauth2Routes);
-
-// Legacy Auth routes (for backward compatibility)
-app.use('/api/auth', authRoutes);
 
 // 404 handler
 app.use((req, res) => {

@@ -241,9 +241,8 @@
     ├── 📂 server/                  # Express.js Backend (Port 5002)
     │   ├── 📂 src/
     │   │   ├── 📂 config/          # App configuration
-    │   │   ├── 📂 controllers/     # authController, oauth2Controller
-    │   │   ├── 📂 middleware/      # JWT authentication middleware
-    │   │   ├── 📂 routes/          # /api/auth, /oauth/*
+    │   │   ├── 📂 controllers/     # oauth2Controller
+    │   │   ├── 📂 routes/          # /oauth/*
     │   │   ├── 📂 utils/           # tokenUtils, oauth2Client
     │   │   └── 📄 index.js         # Server entry point
     │   ├── 📄 .env.example
@@ -523,26 +522,16 @@ Open **4 terminals** and run:
 ### App B - Client Application (Port 5002)
 
 <details>
-<summary><b>🔐 Authentication Endpoints</b></summary>
+<summary><b>� OAuth 2.0 Client Endpoints</b></summary>
 
 | Method | Endpoint | Description | Auth |
 |:------:|:---------|:------------|:----:|
-| `GET` | `/api/auth/me` | Get current user | ✅ |
-| `POST` | `/api/auth/logout` | Logout user | ✅ |
-| `GET` | `/api/auth/verify` | Verify JWT token | ✅ |
-
-</details>
-
-<details>
-<summary><b>🔑 OAuth 2.0 Client Endpoints</b></summary>
-
-| Method | Endpoint | Description | Auth |
-|:------:|:---------|:------------|:----:|
-| `GET` | `/oauth/login` | Initiate OAuth flow | ❌ |
-| `GET` | `/oauth/callback` | Server-side callback | ❌ |
-| `POST` | `/oauth/callback` | Frontend callback (PKCE) | ❌ |
+| `POST` | `/oauth/callback` | Exchange code for tokens (PKCE) | ❌ |
 | `POST` | `/oauth/refresh` | Refresh access token | ❌ |
-| `POST` | `/oauth/logout` | Logout with revocation | ❌ |
+| `POST` | `/oauth/logout` | Logout with token revocation | ❌ |
+| `GET` | `/oauth/me` | Get current user | 🎫 |
+
+> 🎫 = Access token required
 
 </details>
 
@@ -612,7 +601,6 @@ OAUTH_REDIRECT_URI=http://localhost:3002/oauth/callback
 <summary><b>App B Client</b> (<code>app-b/client/.env</code>)</summary>
 
 ```env
-REACT_APP_API_URL=http://localhost:5002/api
 REACT_APP_OAUTH_URL=http://localhost:5002/oauth
 REACT_APP_APP_A_URL=http://localhost:3001
 REACT_APP_OAUTH_CLIENT_ID=app-b-client

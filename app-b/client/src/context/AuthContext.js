@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { authAPI, oauthAPI } from '../services/api';
+import { oauthAPI } from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -113,7 +113,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const token = localStorage.getItem('appb_token');
       if (token) {
-        const response = await authAPI.getMe();
+        const response = await oauthAPI.getMe();
         setUser(response.data.data.user);
       }
     } catch (err) {
@@ -193,7 +193,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      await authAPI.logout();
+      await oauthAPI.logout();
     } catch (err) {
       console.error('Logout error:', err);
     } finally {

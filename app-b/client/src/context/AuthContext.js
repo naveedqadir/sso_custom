@@ -47,11 +47,67 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [ssoChecked, setSsoChecked] = useState(false);
 
   // Check if user is already logged in on mount
   useEffect(() => {
     checkAuth();
   }, []);
+
+  // Auto-SSO: Check if user is logged in at App A (silent authentication)
+  useEffect(() => {
+    // Only attempt SSO if:
+    // 1. Initial auth check is done (loading is false)
+    // 2. User is not logged in locally
+    // 3. SSO check hasn't been done yet
+    // 4. We're not already in an OAuth callback
+    // 5. User hasn't explicitly logged out (respect their choice)
+    const userLoggedOut = sessionStorage.getItem('user_logged_out') === 'true';
+    if (!loading && !user && !ssoChecked && !userLoggedOut && !window.location.pathname.includes('/oauth/callback')) {
+      attemptSilentSSO();
+    }
+  }, [loading, user, ssoChecked]);
+
+  const attemptSilentSSO = async () => {
+    try {
+      // Check if we already tried SSO (prevent infinite loops)
+      const ssoAttempted = sessionStorage.getItem('sso_attempted');
+      if (ssoAttempted) {
+        setSsoChecked(true);
+        return;
+      }
+
+      // Mark that we're attempting SSO
+      sessionStorage.setItem('sso_attempted', 'true');
+
+      // Generate PKCE values
+      const codeVerifier = generateRandomString(64);
+      const codeChallenge = await generateCodeChallenge(codeVerifier);
+      const state = generateRandomString(32);
+
+      // Store for callback
+      sessionStorage.setItem('oauth_code_verifier', codeVerifier);
+      sessionStorage.setItem('oauth_state', state);
+      sessionStorage.setItem('sso_silent', 'true');
+
+      // Build authorization URL with prompt=none for silent auth
+      const authUrl = new URL(`${APP_A_URL}/oauth/authorize`);
+      authUrl.searchParams.set('response_type', 'code');
+      authUrl.searchParams.set('client_id', OAUTH_CLIENT_ID);
+      authUrl.searchParams.set('redirect_uri', OAUTH_REDIRECT_URI);
+      authUrl.searchParams.set('scope', OAUTH_SCOPE);
+      authUrl.searchParams.set('state', state);
+      authUrl.searchParams.set('code_challenge', codeChallenge);
+      authUrl.searchParams.set('code_challenge_method', 'S256');
+      authUrl.searchParams.set('prompt', 'none'); // Silent authentication
+
+      // Redirect for silent SSO check
+      window.location.href = authUrl.toString();
+    } catch (err) {
+      console.error('Silent SSO failed:', err);
+      setSsoChecked(true);
+    }
+  };
 
   const checkAuth = async () => {
     try {
@@ -103,6 +159,9 @@ export const AuthProvider = ({ children }) => {
   // Initiate OAuth 2.0 Authorization Code Flow with PKCE
   const initiateOAuthLogin = useCallback(async () => {
     try {
+      // Clear the logged out flag when user manually initiates login
+      sessionStorage.removeItem('user_logged_out');
+      
       // Generate PKCE code verifier and challenge
       const codeVerifier = generateRandomString(64);
       const codeChallenge = await generateCodeChallenge(codeVerifier);
@@ -142,6 +201,10 @@ export const AuthProvider = ({ children }) => {
       localStorage.removeItem('appb_user');
       localStorage.removeItem('appb_refresh_token');
       localStorage.removeItem('appb_id_token');
+      // Mark that user explicitly logged out - don't auto-SSO them back in
+      sessionStorage.setItem('user_logged_out', 'true');
+      sessionStorage.removeItem('sso_attempted');
+      sessionStorage.removeItem('sso_silent');
       setUser(null);
     }
   };

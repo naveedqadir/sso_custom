@@ -28,7 +28,8 @@ const authorize = async (req, res) => {
       state,
       code_challenge,
       code_challenge_method = 'S256',
-      nonce // OIDC
+      nonce, // OIDC
+      prompt // OIDC: 'none' for silent authentication
     } = req.query;
 
     // Validate required parameters
@@ -74,12 +75,23 @@ const authorize = async (req, res) => {
 
     // Check if user is authenticated (via session/cookie from App A)
     if (!req.user) {
+      // If prompt=none (silent auth), return error - user must be logged in
+      if (prompt === 'none') {
+        const redirectUrl = new URL(redirect_uri);
+        redirectUrl.searchParams.set('error', 'login_required');
+        redirectUrl.searchParams.set('error_description', 'User is not authenticated');
+        if (state) {
+          redirectUrl.searchParams.set('state', state);
+        }
+        return res.redirect(redirectUrl.toString());
+      }
+      
       // Redirect to login with return URL
       const returnUrl = encodeURIComponent(req.originalUrl);
       return res.redirect(`/login?returnUrl=${returnUrl}`);
     }
 
-    // For this implementation, we auto-approve (in production, show consent screen)
+    // For first-party trusted clients, auto-approve (no consent screen needed)
     // Generate authorization code
     const code = await generateAuthorizationCode({
       clientId: client_id,

@@ -354,9 +354,37 @@ Open **4 terminals** and run:
 │                                                                             │
 │   3️⃣  Redirected to App A → Login or Register                              │
 │                                                                             │
-│   4️⃣  Grant consent on OAuth consent screen                                │
+│   4️⃣  Auto-authorized (first-party client, no consent screen)              │
 │                                                                             │
 │   5️⃣  Redirected back to App B → Authenticated! ✅                         │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Testing True SSO (Silent Authentication)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          SSO Test Guide                                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   Test 1: SSO Auto-Login                                                    │
+│   ──────────────────────                                                    │
+│   1️⃣  Open http://localhost:3001 (App A) and login                         │
+│   2️⃣  Open http://localhost:3002 (App B) in same browser                   │
+│   3️⃣  App B automatically logs you in! ✅ (silent SSO)                     │
+│                                                                             │
+│   Test 2: Logout Persistence                                                │
+│   ──────────────────────────                                                │
+│   1️⃣  While logged into both apps, click "Logout" on App B                 │
+│   2️⃣  Refresh App B → You stay logged out ✅                               │
+│   3️⃣  Click "Login with OAuth 2.0" → Manual login works ✅                 │
+│                                                                             │
+│   Test 3: No Session                                                        │
+│   ──────────────────                                                        │
+│   1️⃣  Clear all browser data / open incognito                              │
+│   2️⃣  Open http://localhost:3002 (App B)                                   │
+│   3️⃣  See landing page (silent SSO check fails gracefully) ✅              │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -381,6 +409,9 @@ Open **4 terminals** and run:
 │   📝  Client Registration       Only registered clients allowed             │
 │   🔗  Redirect URI Validation   Prevents open redirect attacks              │
 │   ❌  Token Revocation          Ability to invalidate tokens                │
+│   🔇  Silent Auth (prompt=none) True SSO without UI interaction             │
+│   👤  First-Party Auto-Approve  Trusted clients skip consent screen         │
+│   🚪  Logout Persistence        Respects user's explicit logout choice      │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -393,6 +424,8 @@ Open **4 terminals** and run:
 | **RFC 7636** | ✅ | PKCE Extension (S256 method) |
 | **OpenID Connect Core 1.0** | ✅ | ID Tokens, UserInfo endpoint |
 | **OpenID Connect Discovery** | ✅ | `.well-known/openid-configuration` |
+| **OIDC prompt Parameter** | ✅ | `prompt=none` for silent SSO (Section 3.1.2.1) |
+| **OIDC Error Responses** | ✅ | `login_required` error (Section 3.1.2.6) |
 
 ### Best Practices
 
@@ -599,6 +632,116 @@ node src/scripts/registerClient.js
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## 🔄 True SSO (Single Sign-On)
+
+This implementation supports **True SSO** using OpenID Connect's `prompt=none` parameter, enabling seamless authentication across applications.
+
+### How SSO Works
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     Silent SSO Authentication Flow                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   User visits App B (not logged in locally)                                 │
+│      ↓                                                                      │
+│   App B checks: Is user already logged in at App A?                         │
+│      ↓                                                                      │
+│   App B sends silent auth request with prompt=none                          │
+│      ↓                                                                      │
+│   ┌─────────────────────────────────────────────────────────────────────┐   │
+│   │  If user IS logged in at App A:                                     │   │
+│   │    → Authorization code returned silently                           │   │
+│   │    → User automatically logged into App B ✅                        │   │
+│   ├─────────────────────────────────────────────────────────────────────┤   │
+│   │  If user is NOT logged in at App A:                                 │   │
+│   │    → Returns error: login_required                                  │   │
+│   │    → User sees normal App B landing page                            │   │
+│   └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### SSO Features
+
+| Feature | Description | OIDC Standard |
+|:--------|:------------|:-------------:|
+| **Silent Authentication** | `prompt=none` checks for existing session without UI | ✅ Section 3.1.2.1 |
+| **First-Party Auto-Approve** | Trusted clients skip consent screen | ✅ Section 3.1.2.4 |
+| **login_required Error** | Returned when user not authenticated | ✅ Section 3.1.2.6 |
+| **Logout Persistence** | `user_logged_out` flag prevents unwanted auto-SSO | Industry Standard |
+
+### SSO User Experience
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          SSO Scenario Examples                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   Scenario 1: User logs into App A first                                    │
+│   ─────────────────────────────────────                                     │
+│   1. User logs in at http://localhost:3001 (App A)                          │
+│   2. User visits http://localhost:3002 (App B)                              │
+│   3. App B detects session at App A → Auto-login! ✅                        │
+│   4. No login form, no consent screen                                       │
+│                                                                             │
+│   Scenario 2: User logs out of App B                                        │
+│   ─────────────────────────────────────                                     │
+│   1. User clicks "Logout" on App B                                          │
+│   2. user_logged_out flag set in sessionStorage                             │
+│   3. User stays logged out of App B (respects their choice)                 │
+│   4. User can still manually click "Login with OAuth 2.0" to re-login       │
+│                                                                             │
+│   Scenario 3: Fresh visit (no session anywhere)                             │
+│   ─────────────────────────────────────────────                             │
+│   1. User visits http://localhost:3002 (App B)                              │
+│   2. Silent SSO check fails (no session at App A)                           │
+│   3. User sees normal landing page with "Login" button                      │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Implementation Details
+
+**App B Client - Auto-SSO Check** (`AuthContext.js`):
+```javascript
+// On page load, attempt silent SSO
+useEffect(() => {
+  const userLoggedOut = sessionStorage.getItem('user_logged_out') === 'true';
+  
+  if (!user && !loading && !ssoAttempted && !userLoggedOut) {
+    attemptSilentSSO();  // Try prompt=none
+  }
+}, [user, loading]);
+```
+
+**App A Authorization Server** (`OAuthAuthorize.js`):
+```javascript
+// Handle prompt=none (silent authentication)
+if (prompt === 'none') {
+  if (!isAuthenticated) {
+    // Return OIDC-compliant error
+    redirect(`${redirectUri}?error=login_required&state=${state}`);
+  } else {
+    // Auto-authorize silently
+    autoAuthorize();
+  }
+}
+```
+
+### Standards Compliance
+
+This SSO implementation follows:
+
+| Standard | Reference | Our Implementation |
+|:---------|:----------|:-------------------|
+| **OIDC Core 1.0** | Section 3.1.2.1 | `prompt=none` for silent auth |
+| **OIDC Core 1.0** | Section 3.1.2.3 | "MUST NOT interact" when prompt=none |
+| **OIDC Core 1.0** | Section 3.1.2.6 | `login_required` error response |
+| **OIDC Core 1.0** | Section 3.1.2.4 | Pre-configured consent for first-party |
 
 ---
 

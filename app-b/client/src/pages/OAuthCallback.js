@@ -22,8 +22,23 @@ const OAuthCallback = () => {
       const errorParam = searchParams.get('error');
       const errorDescription = searchParams.get('error_description');
 
+      // Check if this was a silent SSO attempt
+      const isSilentAuth = sessionStorage.getItem('sso_silent') === 'true';
+      
       // Handle error response from authorization server
       if (errorParam) {
+        // Clean up SSO flags
+        sessionStorage.removeItem('sso_silent');
+        sessionStorage.removeItem('oauth_state');
+        sessionStorage.removeItem('oauth_code_verifier');
+        
+        // For silent auth, login_required is expected if user not logged in at App A
+        // Just redirect to landing page without showing error
+        if (isSilentAuth && errorParam === 'login_required') {
+          navigate('/', { replace: true });
+          return;
+        }
+        
         const message = errorDescription || `OAuth error: ${errorParam}`;
         setError(message);
         setProcessing(false);
@@ -60,6 +75,8 @@ const OAuthCallback = () => {
         // Clear OAuth session data
         sessionStorage.removeItem('oauth_state');
         sessionStorage.removeItem('oauth_code_verifier');
+        sessionStorage.removeItem('sso_silent');
+        sessionStorage.removeItem('sso_attempted');
         
         if (result.success) {
           navigate('/dashboard', { replace: true });

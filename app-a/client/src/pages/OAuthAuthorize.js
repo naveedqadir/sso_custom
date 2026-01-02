@@ -5,7 +5,8 @@ import { useAuth } from '../context/AuthContext';
 /**
  * OAuth Authorization Page
  * This page handles the OAuth 2.0 authorization flow
- * Shows consent screen and redirects back to client with authorization code
+ * For first-party trusted clients, auto-approves without showing consent screen
+ * Supports prompt=none for silent SSO authentication
  */
 const OAuthAuthorize = () => {
   const [searchParams] = useSearchParams();
@@ -24,12 +25,41 @@ const OAuthAuthorize = () => {
   const codeChallenge = searchParams.get('code_challenge');
   const codeChallengeMethod = searchParams.get('code_challenge_method');
   const nonce = searchParams.get('nonce');
+  const prompt = searchParams.get('prompt'); // OIDC prompt parameter
 
   useEffect(() => {
+    // Handle prompt=none (silent authentication)
+    if (prompt === 'none') {
+      if (!loading && !isAuthenticated) {
+        // User not logged in, return error to client
+        const errorUrl = new URL(redirectUri);
+        errorUrl.searchParams.set('error', 'login_required');
+        errorUrl.searchParams.set('error_description', 'User is not authenticated');
+        if (state) {
+          errorUrl.searchParams.set('state', state);
+        }
+        window.location.href = errorUrl.toString();
+        return;
+      }
+      
+      if (!loading && isAuthenticated) {
+        // User is logged in, auto-authorize silently
+        autoAuthorize();
+        return;
+      }
+      return;
+    }
+
     // If not authenticated, redirect to login with return URL
     if (!loading && !isAuthenticated) {
       const returnUrl = encodeURIComponent(window.location.href);
       navigate(`/login?returnUrl=${returnUrl}`);
+      return;
+    }
+
+    // For first-party trusted clients, auto-authorize (skip consent screen)
+    if (!loading && isAuthenticated && clientId === 'app-b-client') {
+      autoAuthorize();
       return;
     }
 
@@ -44,32 +74,29 @@ const OAuthAuthorize = () => {
       name: 'App B',
       clientId: clientId
     });
-  }, [loading, isAuthenticated, navigate, clientId, redirectUri, responseType]);
+  }, [loading, isAuthenticated, navigate, clientId, redirectUri, responseType, prompt, state]);
+
+  const autoAuthorize = () => {
+    // Build the authorization URL with all parameters
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      scope: scope,
+      ...(state && { state }),
+      ...(codeChallenge && { code_challenge: codeChallenge }),
+      ...(codeChallengeMethod && { code_challenge_method: codeChallengeMethod }),
+      ...(nonce && { nonce })
+    });
+
+    // Redirect to backend OAuth authorize endpoint (skips consent)
+    window.location.href = `http://localhost:5001/oauth/authorize?${params.toString()}`;
+  };
 
   const handleAuthorize = async () => {
     setAuthorizing(true);
     setError('');
-
-    try {
-      // Build the authorization URL with all parameters
-      const params = new URLSearchParams({
-        response_type: 'code',
-        client_id: clientId,
-        redirect_uri: redirectUri,
-        scope: scope,
-        ...(state && { state }),
-        ...(codeChallenge && { code_challenge: codeChallenge }),
-        ...(codeChallengeMethod && { code_challenge_method: codeChallengeMethod }),
-        ...(nonce && { nonce })
-      });
-
-      // Redirect to backend OAuth authorize endpoint
-      // The backend will generate the authorization code and redirect
-      window.location.href = `http://localhost:5001/oauth/authorize?${params.toString()}`;
-    } catch (err) {
-      setError('Authorization failed. Please try again.');
-      setAuthorizing(false);
-    }
+    autoAuthorize();
   };
 
   const handleDeny = () => {

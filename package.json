@@ -1,0 +1,15 @@
+{
+  "name": "oauth2-mern-apps",
+  "version": "1.0.0",
+  "description": "OAuth 2.0 / OpenID Connect with two MERN apps",
+  "scripts": {
+    "install:all": "cd app-a/server && npm install && cd ../client && npm install && cd ../../app-b/server && npm install && cd ../client && npm install",
+    "start:app-a-server": "cd app-a/server && npm run dev",
+    "start:app-a-client": "cd app-a/client && npm start",
+    "start:app-b-server": "cd app-b/server && npm run dev",
+    "start:app-b-client": "cd app-b/client && npm start"
+  },
+  "keywords": ["oauth2", "oidc", "mern", "jwt", "authentication"],
+  "author": "",
+  "license": "MIT"
+}

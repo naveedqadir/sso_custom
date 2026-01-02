@@ -1,0 +1,651 @@
+# 🔐 OAuth 2.0 / OpenID Connect - MERN Stack
+
+<div align="center">
+
+![OAuth 2.0](https://img.shields.io/badge/OAuth-2.0-blue?style=for-the-badge&logo=oauth)
+![OpenID Connect](https://img.shields.io/badge/OpenID-Connect-orange?style=for-the-badge)
+![PKCE](https://img.shields.io/badge/PKCE-S256-green?style=for-the-badge)
+![Node.js](https://img.shields.io/badge/Node.js-18+-339933?style=for-the-badge&logo=node.js)
+![React](https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react)
+![MongoDB](https://img.shields.io/badge/MongoDB-47A248?style=for-the-badge&logo=mongodb)
+
+**A complete OAuth 2.0 Authorization Server implementation using the MERN stack**
+
+*Authorization Code Flow with PKCE • OpenID Connect • JWT Authentication • Tailwind CSS*
+
+</div>
+
+---
+
+## 📋 Table of Contents
+
+- [Architecture](#-architecture)
+- [Project Structure](#-project-structure)
+- [Getting Started](#-getting-started)
+- [Security Features](#-security-features)
+- [API Endpoints](#-api-endpoints)
+- [Technology Stack](#-technology-stack)
+- [Configuration](#-configuration)
+- [Production Deployment](#-production-deployment)
+
+---
+
+## 🏗️ Architecture
+
+### System Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                            OAuth 2.0 / OIDC Architecture                        │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│    ┌───────────────────┐                          ┌───────────────────┐        │
+│    │                   │                          │                   │        │
+│    │      APP A        │◄────── OAuth 2.0 ───────►│      APP B        │        │
+│    │  Authorization    │         Tokens           │  Client           │        │
+│    │     Server        │                          │  Application      │        │
+│    │                   │                          │                   │        │
+│    │  ┌─────────────┐  │                          │  ┌─────────────┐  │        │
+│    │  │   Server    │  │                          │  │   Server    │  │        │
+│    │  │  Port 5001  │  │                          │  │  Port 5002  │  │        │
+│    │  └─────────────┘  │                          │  └─────────────┘  │        │
+│    │  ┌─────────────┐  │                          │  ┌─────────────┐  │        │
+│    │  │   Client    │  │                          │  │   Client    │  │        │
+│    │  │  Port 3001  │  │                          │  │  Port 3002  │  │        │
+│    │  └─────────────┘  │                          │  └─────────────┘  │        │
+│    │                   │                          │                   │        │
+│    └───────────────────┘                          └───────────────────┘        │
+│             │                                              │                    │
+│             │                    ┌─────────┐               │                    │
+│             └────────────────────│ MongoDB │───────────────┘                    │
+│                                  └─────────┘                                    │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### OAuth 2.0 Authorization Code Flow with PKCE
+
+```
+    ┌────────────┐                                                           ┌────────────┐
+    │            │                                                           │            │
+    │   USER     │                                                           │   APP B    │
+    │  BROWSER   │                                                           │   CLIENT   │
+    │            │                                                           │            │
+    └─────┬──────┘                                                           └─────┬──────┘
+          │                                                                        │
+          │ 1. Click "Login with OAuth 2.0"                                        │
+          │ ────────────────────────────────────────────────────────────────────── │
+          │                                                                        │
+          │                         ┌──────────────────────────────────────────────┤
+          │                         │  2. Generate PKCE:                           │
+          │                         │     • code_verifier (random 64 chars)        │
+          │                         │     • code_challenge = SHA256(code_verifier) │
+          │                         │     • state (CSRF token)                     │
+          │                         └──────────────────────────────────────────────┤
+          │                                                                        │
+          │ 3. Redirect to App A: /oauth/authorize?                                │
+          │    client_id=app-b-client&response_type=code&                          │
+          │    redirect_uri=...&scope=openid profile email&                        │
+          │    state=xyz&code_challenge=abc&code_challenge_method=S256             │
+          │ ◄──────────────────────────────────────────────────────────────────────│
+          │                                                                        │
+          │                           ┌────────────┐                               │
+          │                           │            │                               │
+          │                           │   APP A    │                               │
+          │                           │   AUTH     │                               │
+          │                           │   SERVER   │                               │
+          │                           │            │                               │
+          │                           └─────┬──────┘                               │
+          │                                 │                                      │
+          │ 4. Authorization Request        │                                      │
+          │ ───────────────────────────────►│                                      │
+          │                                 │                                      │
+          │ 5. Show Login Page              │                                      │
+          │ ◄───────────────────────────────│                                      │
+          │                                 │                                      │
+          │ 6. User enters credentials      │                                      │
+          │ ───────────────────────────────►│                                      │
+          │                                 │                                      │
+          │ 7. Show Consent Screen          │                                      │
+          │    "App B wants to access:"     │                                      │
+          │    ✓ Your profile               │                                      │
+          │    ✓ Your email                 │                                      │
+          │ ◄───────────────────────────────│                                      │
+          │                                 │                                      │
+          │ 8. User clicks "Allow"          │                                      │
+          │ ───────────────────────────────►│                                      │
+          │                                 │                                      │
+          │                                 │ 9. Generate Authorization Code       │
+          │                                 │    (short-lived, one-time use)       │
+          │                                 │                                      │
+          │ 10. Redirect: redirect_uri?code=AUTH_CODE&state=xyz                    │
+          │ ◄───────────────────────────────│                                      │
+          │                                 │                                      │
+          │ 11. Callback with code          │                                      │
+          │ ────────────────────────────────────────────────────────────────────── │
+          │                                                                        │
+          │                         ┌──────────────────────────────────────────────┤
+          │                         │  12. Verify state parameter matches          │
+          │                         └──────────────────────────────────────────────┤
+          │                                                                        │
+          │                                 │ 13. POST /oauth/token                 │
+          │                                 │     grant_type=authorization_code    │
+          │                                 │     code=AUTH_CODE                   │
+          │                                 │     code_verifier=...                │
+          │                                 │     client_id=app-b-client           │
+          │                                 │ ◄─────────────────────────────────── │
+          │                                 │                                      │
+          │                                 │ 14. Validate:                        │
+          │                                 │     • Authorization code             │
+          │                                 │     • PKCE code_challenge            │
+          │                                 │     • Client credentials             │
+          │                                 │                                      │
+          │                                 │ 15. Return Tokens:                   │
+          │                                 │     {                                │
+          │                                 │       access_token: "...",           │
+          │                                 │       refresh_token: "...",          │
+          │                                 │       id_token: "..." (OIDC)         │
+          │                                 │     }                                │
+          │                                 │ ────────────────────────────────────►│
+          │                                 │                                      │
+          │ 16. User Authenticated! Show Dashboard                                 │
+          │ ◄──────────────────────────────────────────────────────────────────────│
+          │                                                                        │
+          ▼                                                                        ▼
+```
+
+---
+
+## 📁 Project Structure
+
+```
+📦 sso_custom/
+├── 📄 package.json                 # Root scripts for managing all apps
+├── 📄 README.md
+├── 📄 .gitignore
+│
+├── 📂 app-a/                       # 🔐 Authorization Server (OAuth 2.0 Provider)
+│   │
+│   ├── 📂 server/                  # Express.js Backend (Port 5001)
+│   │   ├── 📂 src/
+│   │   │   ├── 📂 config/          # Database & app configuration
+│   │   │   ├── 📂 controllers/     # authController, oauth2Controller
+│   │   │   ├── 📂 middleware/      # JWT authentication middleware
+│   │   │   ├── 📂 models/          # User, OAuthClient, AuthorizationCode, RefreshToken
+│   │   │   ├── 📂 routes/          # /api/auth, /oauth/*
+│   │   │   ├── 📂 scripts/         # registerClient.js
+│   │   │   ├── 📂 utils/           # tokenUtils, oauth2Utils
+│   │   │   └── 📄 index.js         # Server entry point
+│   │   ├── 📄 .env.example
+│   │   └── 📄 package.json
+│   │
+│   └── 📂 client/                  # React Frontend (Port 3001)
+│       ├── 📂 src/
+│       │   ├── 📂 components/      # PrivateRoute, Navbar
+│       │   ├── 📂 context/         # AuthContext
+│       │   ├── 📂 pages/           # Login, Register, Dashboard, OAuthAuthorize
+│       │   ├── 📂 services/        # API service
+│       │   └── 📄 App.js
+│       ├── 📄 .env.example
+│       └── 📄 package.json
+│
+└── 📂 app-b/                       # 🌐 Client Application (OAuth 2.0 Client)
+    │
+    ├── 📂 server/                  # Express.js Backend (Port 5002)
+    │   ├── 📂 src/
+    │   │   ├── 📂 config/          # App configuration
+    │   │   ├── 📂 controllers/     # authController, oauth2Controller
+    │   │   ├── 📂 middleware/      # JWT authentication middleware
+    │   │   ├── 📂 routes/          # /api/auth, /oauth/*
+    │   │   ├── 📂 utils/           # tokenUtils, oauth2Client
+    │   │   └── 📄 index.js         # Server entry point
+    │   ├── 📄 .env.example
+    │   └── 📄 package.json
+    │
+    └── 📂 client/                  # React Frontend (Port 3002)
+        ├── 📂 src/
+        │   ├── 📂 components/      # PrivateRoute
+        │   ├── 📂 context/         # AuthContext (with PKCE)
+        │   ├── 📂 pages/           # Landing, Dashboard, OAuthCallback
+        │   ├── 📂 services/        # API service
+        │   └── 📄 App.js
+        ├── 📄 .env.example
+        └── 📄 package.json
+```
+
+---
+
+## 📦 Available Scripts
+
+The root `package.json` provides convenience scripts:
+
+| Script | Description |
+|:-------|:------------|
+| `npm run install:all` | 📥 Install dependencies for all 4 apps |
+| `npm run start:app-a-server` | 🚀 Start App A backend (Port 5001) |
+| `npm run start:app-a-client` | 🚀 Start App A frontend (Port 3001) |
+| `npm run start:app-b-server` | 🚀 Start App B backend (Port 5002) |
+| `npm run start:app-b-client` | 🚀 Start App B frontend (Port 3002) |
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+| Requirement | Version |
+|:------------|:--------|
+| Node.js | v18 or higher |
+| MongoDB | Local or Atlas |
+| npm | Latest |
+
+### Installation
+
+<details>
+<summary><b>Step 1: Install Dependencies</b></summary>
+
+**Option A: Using root package.json (Recommended)**
+```bash
+cd sso_custom
+npm run install:all
+```
+
+**Option B: Manual installation**
+```bash
+# App A Server
+cd app-a/server && npm install
+
+# App A Client  
+cd ../client && npm install
+
+# App B Server
+cd ../../app-b/server && npm install
+
+# App B Client
+cd ../client && npm install
+```
+</details>
+
+<details>
+<summary><b>Step 2: Configure Environment Variables</b></summary>
+
+```bash
+# Copy example files
+cp app-a/server/.env.example app-a/server/.env
+cp app-a/client/.env.example app-a/client/.env
+cp app-b/server/.env.example app-b/server/.env
+cp app-b/client/.env.example app-b/client/.env
+```
+
+Default values work for local development.
+</details>
+
+<details>
+<summary><b>Step 3: Register OAuth Client</b></summary>
+
+**⚠️ IMPORTANT:** You must register the OAuth client in the database before testing:
+
+```bash
+cd app-a/server
+node src/scripts/registerClient.js
+```
+
+**Output:**
+```
+=== OAuth 2.0 Client Registered ===
+
+Client Name: App B
+Client ID: app-b-client
+Client Secret: <generated-secret>
+
+Redirect URIs:
+  - http://localhost:3002/oauth/callback
+
+Allowed Scopes: openid, profile, email
+
+=== IMPORTANT ===
+Add these to App B server .env file:
+OAUTH_CLIENT_ID=app-b-client
+OAUTH_CLIENT_SECRET=<generated-secret>
+```
+
+**Then update App B server `.env`:**
+```bash
+# Add the credentials from the script output
+OAUTH_CLIENT_ID=app-b-client
+OAUTH_CLIENT_SECRET=<paste-secret-from-output>
+```
+
+> 💡 **Tip:** Use `--force` flag to re-register: `node src/scripts/registerClient.js --force`
+</details>
+
+### Running the Applications
+
+Open **4 terminals** and run:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│   Terminal 1                      Terminal 2                                │
+│   ───────────────────────         ───────────────────────                   │
+│   cd app-a/server                 cd app-a/client                           │
+│   npm run dev                     npm start                                 │
+│   🟢 Port 5001                    🟢 Port 3001                              │
+│                                                                             │
+│   Terminal 3                      Terminal 4                                │
+│   ───────────────────────         ───────────────────────                   │
+│   cd app-b/server                 cd app-b/client                           │
+│   npm run dev                     npm start                                 │
+│   🟢 Port 5002                    🟢 Port 3002                              │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Testing the OAuth 2.0 Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          Quick Test Guide                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   1️⃣  Open http://localhost:3002 (App B)                                   │
+│                                                                             │
+│   2️⃣  Click "Login with OAuth 2.0"                                         │
+│                                                                             │
+│   3️⃣  Redirected to App A → Login or Register                              │
+│                                                                             │
+│   4️⃣  Grant consent on OAuth consent screen                                │
+│                                                                             │
+│   5️⃣  Redirected back to App B → Authenticated! ✅                         │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🔐 Security Features
+
+### OAuth 2.0 / OIDC Security
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         Security Features                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   🛡️  PKCE (RFC 7636)           Prevents authorization code interception   │
+│   🔒  State Parameter           CSRF protection via random token            │
+│   🎫  Authorization Code Flow   Secure flow for web applications            │
+│   🪪  ID Tokens (OIDC)          JWT with user identity claims               │
+│   🔑  Access Tokens             Short-lived API access tokens               │
+│   🔄  Refresh Tokens            Long-lived token renewal                    │
+│   📝  Client Registration       Only registered clients allowed             │
+│   🔗  Redirect URI Validation   Prevents open redirect attacks              │
+│   ❌  Token Revocation          Ability to invalidate tokens                │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Standards Compliance
+
+| Standard | Status | Description |
+|:---------|:------:|:------------|
+| **RFC 6749** | ✅ | OAuth 2.0 Authorization Framework |
+| **RFC 7636** | ✅ | PKCE Extension (S256 method) |
+| **OpenID Connect Core 1.0** | ✅ | ID Tokens, UserInfo endpoint |
+| **OpenID Connect Discovery** | ✅ | `.well-known/openid-configuration` |
+
+### Best Practices
+
+| Practice | Implementation |
+|:---------|:---------------|
+| Password Hashing | bcrypt (12 salt rounds) |
+| CORS | Specific origins only |
+| Input Validation | Server-side sanitization |
+| Error Handling | No internal details exposed |
+| Architecture | MVC pattern |
+| Cookies | HTTP-only, Secure flag |
+
+---
+
+## 📡 API Endpoints
+
+### App A - Authorization Server (Port 5001)
+
+<details>
+<summary><b>🔐 Authentication Endpoints</b></summary>
+
+| Method | Endpoint | Description | Auth |
+|:------:|:---------|:------------|:----:|
+| `POST` | `/api/auth/register` | Register new user | ❌ |
+| `POST` | `/api/auth/login` | Login user | ❌ |
+| `POST` | `/api/auth/logout` | Logout user | ✅ |
+| `GET` | `/api/auth/me` | Get current user | ✅ |
+| `GET` | `/api/auth/verify` | Verify JWT token | ✅ |
+
+</details>
+
+<details>
+<summary><b>🔑 OAuth 2.0 / OIDC Endpoints</b></summary>
+
+| Method | Endpoint | Description | Auth |
+|:------:|:---------|:------------|:----:|
+| `GET` | `/.well-known/openid-configuration` | OIDC Discovery | ❌ |
+| `GET` | `/.well-known/jwks.json` | JSON Web Key Set | ❌ |
+| `GET` | `/oauth/authorize` | Authorization endpoint | 🔓 |
+| `POST` | `/oauth/token` | Token endpoint | 🔐 |
+| `GET` | `/oauth/userinfo` | Get user info | 🎫 |
+| `POST` | `/oauth/revoke` | Revoke token | 🔐 |
+
+> 🔓 = Login required | 🔐 = Client auth | 🎫 = Access token
+
+</details>
+
+### App B - Client Application (Port 5002)
+
+<details>
+<summary><b>🔐 Authentication Endpoints</b></summary>
+
+| Method | Endpoint | Description | Auth |
+|:------:|:---------|:------------|:----:|
+| `GET` | `/api/auth/me` | Get current user | ✅ |
+| `POST` | `/api/auth/logout` | Logout user | ✅ |
+| `GET` | `/api/auth/verify` | Verify JWT token | ✅ |
+
+</details>
+
+<details>
+<summary><b>🔑 OAuth 2.0 Client Endpoints</b></summary>
+
+| Method | Endpoint | Description | Auth |
+|:------:|:---------|:------------|:----:|
+| `GET` | `/oauth/login` | Initiate OAuth flow | ❌ |
+| `GET` | `/oauth/callback` | Server-side callback | ❌ |
+| `POST` | `/oauth/callback` | Frontend callback (PKCE) | ❌ |
+| `POST` | `/oauth/refresh` | Refresh access token | ❌ |
+| `POST` | `/oauth/logout` | Logout with revocation | ❌ |
+
+</details>
+
+---
+
+## 🎨 Technology Stack
+
+<div align="center">
+
+| Layer | Technology |
+|:-----:|:-----------|
+| **Frontend** | ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react) ![Router](https://img.shields.io/badge/Router-v6-CA4245?logo=react-router) ![Tailwind](https://img.shields.io/badge/Tailwind-3.4-06B6D4?logo=tailwindcss) |
+| **Backend** | ![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=node.js) ![Express](https://img.shields.io/badge/Express.js-4.x-000000?logo=express) |
+| **Database** | ![MongoDB](https://img.shields.io/badge/MongoDB-47A248?logo=mongodb) ![Mongoose](https://img.shields.io/badge/Mongoose-880000?logo=mongoose) |
+| **Auth** | ![JWT](https://img.shields.io/badge/JWT-000000?logo=jsonwebtokens) ![OAuth](https://img.shields.io/badge/OAuth_2.0-blue) ![OIDC](https://img.shields.io/badge/OpenID_Connect-orange) |
+
+</div>
+
+---
+
+## 🔧 Configuration
+
+### Environment Variables
+
+<details>
+<summary><b>App A Server</b> (<code>app-a/server/.env</code>)</summary>
+
+```env
+PORT=5001
+NODE_ENV=development
+MONGODB_URI=mongodb://localhost:27017/oauth_auth
+JWT_SECRET=your-super-secret-jwt-key-change-in-production
+JWT_EXPIRES_IN=1d
+CLIENT_URL=http://localhost:3001
+APP_B_URL=http://localhost:3002
+```
+</details>
+
+<details>
+<summary><b>App A Client</b> (<code>app-a/client/.env</code>)</summary>
+
+```env
+REACT_APP_API_URL=http://localhost:5001/api
+REACT_APP_APP_B_URL=http://localhost:3002
+PORT=3001
+```
+</details>
+
+<details>
+<summary><b>App B Server</b> (<code>app-b/server/.env</code>)</summary>
+
+```env
+PORT=5002
+NODE_ENV=development
+JWT_SECRET=app-b-secret-key-change-in-production
+JWT_EXPIRES_IN=1d
+APP_A_SERVER_URL=http://localhost:5001
+CLIENT_URL=http://localhost:3002
+APP_A_URL=http://localhost:3001
+OAUTH_CLIENT_ID=app-b-client
+OAUTH_CLIENT_SECRET=your-client-secret
+OAUTH_REDIRECT_URI=http://localhost:3002/oauth/callback
+```
+</details>
+
+<details>
+<summary><b>App B Client</b> (<code>app-b/client/.env</code>)</summary>
+
+```env
+REACT_APP_API_URL=http://localhost:5002/api
+REACT_APP_OAUTH_URL=http://localhost:5002/oauth
+REACT_APP_APP_A_URL=http://localhost:3001
+REACT_APP_OAUTH_CLIENT_ID=app-b-client
+REACT_APP_OAUTH_REDIRECT_URI=http://localhost:3002/oauth/callback
+PORT=3002
+```
+</details>
+
+---
+
+## 🔑 OAuth 2.0 Client Registration
+
+Register App B as an OAuth client before testing:
+
+```bash
+cd app-a/server
+node src/scripts/registerClient.js
+```
+
+**Output:**
+```
+═══════════════════════════════════════════
+   OAuth 2.0 Client Registered Successfully
+═══════════════════════════════════════════
+   Client ID:     app-b-client
+   Redirect URI:  http://localhost:3002/oauth/callback
+   Scopes:        openid profile email
+═══════════════════════════════════════════
+```
+
+---
+
+## 📝 Flow Summary
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                   OAuth 2.0 Authorization Code Flow + PKCE                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   Step 1   User clicks "Login with OAuth 2.0" on App B                      │
+│      ↓                                                                      │
+│   Step 2   App B generates PKCE parameters:                                 │
+│            • code_verifier (64-char random string)                          │
+│            • code_challenge (SHA-256 hash, base64url)                       │
+│            • state (CSRF protection token)                                  │
+│      ↓                                                                      │
+│   Step 3   Redirect to App A with authorization request                     │
+│      ↓                                                                      │
+│   Step 4   User authenticates on App A                                      │
+│      ↓                                                                      │
+│   Step 5   Consent screen shows requested permissions                       │
+│      ↓                                                                      │
+│   Step 6   User grants consent → Authorization code generated               │
+│      ↓                                                                      │
+│   Step 7   Redirect back to App B with code + state                         │
+│      ↓                                                                      │
+│   Step 8   App B verifies state matches                                     │
+│      ↓                                                                      │
+│   Step 9   App B exchanges code + code_verifier for tokens                  │
+│      ↓                                                                      │
+│   Step 10  App A validates PKCE and issues tokens                           │
+│      ↓                                                                      │
+│   Step 11  User authenticated in App B ✅                                   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🚢 Production Deployment
+
+### Deployment Checklist
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        Production Checklist                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   ☐  Use HTTPS for all services (required for OAuth 2.0)                    │
+│   ☐  Set NODE_ENV=production                                                │
+│   ☐  Generate secure, random JWT secrets                                    │
+│   ☐  Configure proper CORS origins                                          │
+│   ☐  Set up MongoDB authentication                                          │
+│   ☐  Use process manager (PM2)                                              │
+│   ☐  Build React apps: npm run build                                        │
+│   ☐  Register OAuth clients with production URIs                            │
+│   ☐  Enable secure cookies (sameSite: 'strict', secure: true)               │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### OAuth 2.0 Security Checklist
+
+| Item | Status |
+|:-----|:------:|
+| HTTPS enabled on all endpoints | ☐ |
+| Strong client secrets generated | ☐ |
+| Redirect URIs validated strictly | ☐ |
+| Token expiration configured | ☐ |
+| Rate limiting on token endpoint | ☐ |
+| Refresh token rotation enabled | ☐ |
+| Audit logging for auth events | ☐ |
+
+---
+
+## 📄 License
+
+<div align="center">
+
+**MIT License** - feel free to use this for your projects!
+
+---
+
+Made with ❤️ using the MERN Stack
+
+</div>
